@@ -15,7 +15,6 @@ import java.util.Random
 import scala.math._
 
 case class DBNParams(W: BDM[Double], vW: BDM[Double],b: BDM[Double], vb: BDM[Double], c: BDM[Double], vc: BDM[Double]) extends Serializable
-
 case class DBNHyperParams(size: Array[Int], layer: Int, momentum: Double, alpha: Double) extends Serializable
 
 class DBN(private var size: Array[Int], private var layer: Int, private var momentum: Double, private var alpha: Double) extends Serializable {
@@ -36,8 +35,11 @@ class DBN(private var size: Array[Int], private var layer: Int, private var mome
     var dbn_vb = DBN.Initialvb(size)
     var dbn_c = DBN.Initialc(size)
     var dbn_vc = DBN.Initialvc(size)
+    printf("Train the first RBM.........")
     
-    printf("Train the first RBM...")
+    
+    
+    
     val param0 = new DBNParams(dbn_W(0), dbn_vW(0), dbn_b(0), dbn_vb(0), dbn_c(0), dbn_vc(0))
     val param1 = RBMtrain(train_d, opts, dbnconfig, param0)
     dbn_W(0) = param1.W
@@ -46,20 +48,21 @@ class DBN(private var size: Array[Int], private var layer: Int, private var mome
     dbn_vb(0) = param1.vb
     dbn_c(0) = param1.c
     dbn_vc(0) = param1.vc
-
+    
+    
+    
+    
+    printf("Train the rest RBMs.........")
     for (i <- 2 to dbnconfig.layer - 1) {
       printf("Train %d th RBM...", i)
-      // 前向计算x
-      //  x = sigm(repmat(rbm.c', size(x, 1), 1) + x * rbm.W');
       val tmp_bc_w = sc.broadcast(dbn_W(i - 2))
       val tmp_bc_c = sc.broadcast(dbn_c(i - 2))
-      val train_d2 = train_d.map { f =>
+      val train_d2 = train_d.map { f =>// 前向计算x x = sigm(repmat(rbm.c', size(x, 1), 1) + x * rbm.W');
         val label = f._1
         val x = f._2
         val x2 = DBN.sigm(x * tmp_bc_w.value.t + tmp_bc_c.value.t)
         (label, x2)
       }
-      // 训练第i层
       val param_i = new DBNParams(dbn_W(i - 1), dbn_vW(i - 1), dbn_b(i - 1), dbn_vb(i - 1), dbn_c(i - 1), dbn_vc(i - 1))
       val weight2 = RBMtrain(train_d2, opts, dbnconfig, param_i)
       dbn_W(i - 1) = weight2.W
@@ -82,22 +85,18 @@ class DBN(private var size: Array[Int], private var layer: Int, private var mome
       * the col number is x.length, and the vector data are from x itself. 
       * Therefore I denote those BDMs that are actually vectors.
    **/
-  def RBMtrain(train_t: RDD[(BDM[Double]/*row vector*/, BDM[Double]/*row vector*/)],   opts: Array[Double],   hyperparams: DBNHyperParams,   weight: DBNParams): DBNParams = {
+  def RBMtrain(train_t: RDD[(BDM[Double]/*row vector*/, BDM[Double]/*row vector*/)], opts: Array[Double], hyperparams: DBNHyperParams, weight: DBNParams): DBNParams = {
     val sc = train_t.sparkContext
     var StartTime = System.currentTimeMillis()
     var EndTime = System.currentTimeMillis()
-    
     var rbm_W = weight.W
     var rbm_vW = weight.vW
     var rbm_b = weight.b
     var rbm_vb = weight.vb
     var rbm_c = weight.c
     var rbm_vc = weight.vc
-    
     val broadcast_config = sc.broadcast(hyperparams)
-    
     val m = train_t.count// number of train samples
-    
     val batchsize = opts(0).toInt
     val numepochs = opts(1).toInt
     val numbatches = (m / batchsize).toInt
@@ -106,7 +105,6 @@ class DBN(private var size: Array[Int], private var layer: Int, private var mome
       StartTime = System.currentTimeMillis()
       val splitW2 = Array.fill(numbatches)(1.0 / numbatches)//if numbatches=10, then Array(0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1)
       var err = 0.0
-      
       for (l <- 1 to numbatches) {
         val broadcast_rbm_W = sc.broadcast(rbm_W)//num.of.layer_latter * num.of.layer_former 
         val broadcast_rbm_vW = sc.broadcast(rbm_vW)//num.of.layer_latter * num.of.layer_former 
@@ -114,21 +112,18 @@ class DBN(private var size: Array[Int], private var layer: Int, private var mome
         val broadcastc_rbm_vb = sc.broadcast(rbm_vb)//col vector
         val broadcast_rbm_c = sc.broadcast(rbm_c)//col vector
         val broadcast_rbm_vc = sc.broadcast(rbm_vc)//col vector
-        
         val train_split2 = train_t.randomSplit(splitW2, System.nanoTime())/**train_split2 has numbatches batches*/
         val batch_xy1 = train_split2(l - 1)//batch_xy1 is RDD[row vector, row vector] mathematically eventhough it is shown as RDD[BDM,BDM]
-        
-        // feed forward
-        val batch_vh1 = batch_xy1.map { f =>
+        val batch_vh1 = batch_xy1.map { f =>// feed forward
           val label = f._1//label is row vector, even though it is shown as BDM
-          val v1 = f._2//v1 is row vector, even though it is shown as BDM
-          //println("v1 rows:"+v1.rows+"    v1 cols:"+v1.cols)
-          val h1 = DBN.sigmrnd((v1 * broadcast_rbm_W.value.t + broadcast_rbm_c.value.t))//row vector
-          val v2 = DBN.sigmrnd((h1 * broadcast_rbm_W.value + broadcast_rbm_b.value.t))//row vector
-          val h2 = DBN.sigm(v2 * broadcast_rbm_W.value.t + broadcast_rbm_c.value.t)//row vector
-          val c1 = h1.t * v1//delta matrix contributed by ONE SINGLE training sample
-          val c2 = h2.t * v2//delta matrix contributed by ONE SINGLE training sample
-          (label, v1, h1, v2, h2, c1, c2)
+          val v0 = f._2//v1 is row vector, even though it is shown as BDM
+          val h0 = DBN.sigm((v0 * broadcast_rbm_W.value.t + broadcast_rbm_c.value.t))//row vector
+          val h_states=DBN.samplestates(h0)
+          val v1 = DBN.sigm((h_states * broadcast_rbm_W.value + broadcast_rbm_b.value.t))//row vector
+          val h1 = DBN.sigm(v1 * broadcast_rbm_W.value.t + broadcast_rbm_c.value.t)//row vector
+          val c1 = h0.t * v0//delta matrix contributed by ONE SINGLE training sample
+          val c2 = h1.t * v1//delta matrix contributed by ONE SINGLE training sample
+          (label, v0, h0, v1, h1, c1, c2)
         }
         
         /** update W: rbm.vW = rbm.momentum * rbm.vW + rbm.alpha * (c1 - c2) / opts.batchsize;*/
@@ -203,14 +198,17 @@ class DBN(private var size: Array[Int], private var layer: Int, private var mome
     }
     new DBNParams(rbm_W, rbm_vW, rbm_b, rbm_vb, rbm_c, rbm_vc)
   }
+  
+
 
 }
 
 
 
 
-object DBN extends Serializable {
 
+
+object DBN extends Serializable {
   // Initialization mode names
   val Activation_Function = "sigm"
   val Output = "linear"
@@ -312,6 +310,14 @@ object DBN extends Serializable {
       rbm_vc += d1
     }
     rbm_vc.toArray
+  }
+  
+  def samplestates(h0: BDM[Double]):BDM[Double]={
+    val r1 = BDM.rand[Double](h0.rows, h0.cols)
+    val a1 = h0 :> r1
+    val a2 = a1.data.map { f => if (f == true) 1.0 else 0.0 }
+    val a3 = new BDM(h0.rows, h0.cols, a2)
+    a3
   }
 
   /**
