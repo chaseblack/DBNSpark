@@ -125,7 +125,9 @@ object DBNApp {
     val sc = new SparkContext(conf)
     val data_file="cleanedBPU.csv"
     val data = sc.textFile(data_file, 1).cache()
-    val index=getAttributeIndex("对标结果",Array("日产液(t)","日产油(t)","日产水(t)","含水率(%)","动液面(m)","冲次(n/min)","泵效(%)","平衡度","日耗电量(kW·h)","地面效率(%)","井下效率(%)","系统效率(%)","沉没度(m)","抽油机负载率(%)"))
+    val target="对标结果"
+    val feature=Array("日产液(t)","日产油(t)","日产水(t)","含水率(%)","动液面(m)","冲次(n/min)","泵效(%)","平衡度","日耗电量(kW·h)","地面效率(%)","井下效率(%)","系统效率(%)","沉没度(m)","抽油机负载率(%)")
+    val index=getAttributeIndex(target,feature)
     val tuple=DBNApp.extract(data,index) 
     var num_vislayer=tuple._1
     var train_d =tuple._2
@@ -135,7 +137,7 @@ object DBNApp {
       
     val num_labellayer=tuple._3
     val opts = Array(100.0,20.0,1)//batchsize, numepoch, k_CD 
-    val DBNmodel =new DBN().setSize(Array(num_vislayer, 4,num_labellayer)).setLayer(3).setMomentum(0.01).setAlpha(0.01).DBNtrain(train_d, opts)
+    val DBNmodel =new DBN().setSize(Array(num_vislayer, 4, num_labellayer)).setLayer(3).setMomentum(0.01).setAlpha(0.01).DBNtrain(train_d, opts)
     
     println("train NN......")
     val mynn = DBNmodel.dbnunfoldtonn(0)
