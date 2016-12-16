@@ -19,7 +19,11 @@ import scala.collection.mutable.ArrayBuffer
 
 
 object DBNApp {
-    def extract(dataWithHead:RDD[String],index:(Int,Array[Int]))={
+  
+  val label_global=Map("井号"->0,"渗透性类型"->1,"岩性"->2,"井型"->3,"抽油机机型"->19,"电机型号"->23,"泵况分析结果"->31,"对标结果"->40)
+  val x_global=Map("造斜点深度(m)"->4,"生产时间(h)"->5,"日产液(t)"->6,"日产油(t)"->7,"日产水(t)"->8,"日产气(m3)"->9,"含水率(%)"->10,"油压(Mpa)"->11,"套压(Mpa)"->12,"动液面(m)"->13,"泵径(mm)"->14,"泵深(m)"->15,"冲程(m)"->16,"冲次(n/min)"->17,"泵效(%)"->18,"额定载荷(kN)"->20,"悬点载荷最大值(kN)"->21,"悬点载荷最小值(kN)"->22,"电机额定功率(kW)"->24,"平衡度"->25,"日耗电量(kW·h)"->26,"输入功率(kW)"->27,"地面效率(%)"->28,"井下效率(%)"->29,"系统效率(%)"->30,"沉没度(m)"->32,"抽油机负载率(%)"->33,"电机功率利用率(%)"->34,"百米吨液耗电(kW.h)"->35,"K1"->36,"K2"->37,"节能限定值"->38,"节能评价值"->39)
+  
+  def extract(dataWithHead:RDD[String],index:(Int,Array[Int]))={
       val head=dataWithHead.first()
       val dataNoHead=dataWithHead.filter { x => x!=head}//remove the head,e.g. the first line
       val y_index=index._1// e.g. y_index=40 means 对标结果
@@ -74,11 +78,8 @@ object DBNApp {
         (new BDM(1,y.length,y),new BDM(1,x.length,x))
         }*/
       }
-   
   
-    
-  val label_global=Map("井号"->0,"渗透性类型"->1,"岩性"->2,"井型"->3,"抽油机机型"->19,"电机型号"->23,"泵况分析结果"->31,"对标结果"->40)
-  val x_global=Map("造斜点深度(m)"->4,"生产时间(h)"->5,"日产液(t)"->6,"日产油(t)"->7,"日产水(t)"->8,"日产气(m3)"->9,"含水率(%)"->10,"油压(Mpa)"->11,"套压(Mpa)"->12,"动液面(m)"->13,"泵径(mm)"->14,"泵深(m)"->15,"冲程(m)"->16,"冲次(n/min)"->17,"泵效(%)"->18,"额定载荷(kN)"->20,"悬点载荷最大值(kN)"->21,"悬点载荷最小值(kN)"->22,"电机额定功率(kW)"->24,"平衡度"->25,"日耗电量(kW·h)"->26,"输入功率(kW)"->27,"地面效率(%)"->28,"井下效率(%)"->29,"系统效率(%)"->30,"沉没度(m)"->32,"抽油机负载率(%)"->33,"电机功率利用率(%)"->34,"百米吨液耗电(kW.h)"->35,"K1"->36,"K2"->37,"节能限定值"->38,"节能评价值"->39)
+  
   def getAttributeIndex(param_y:String, param_x:Array[String])={
     val y_index=label_global.get(param_y).get
     val x_index=ArrayBuffer[Int]()
@@ -119,6 +120,8 @@ object DBNApp {
     val reduced_train_d=sc.parallelize(xyA.toSeq)
     reduced_train_d
   }
+  
+  
   def main(args:Array[String]){
     org.apache.log4j.PropertyConfigurator.configure("/home/chase/runnable/spark-2.0.2-bin-hadoop2.7/conf/log4j.properties");
     val conf = new SparkConf().setAppName("Simple Application").setMaster("local")
@@ -180,24 +183,4 @@ object DBNApp {
     */
   }
   
-  
-  
-  
-    /*
-    val numExamples = train_d.count()
-    println(s"numExamples = $numExamples.")
-    println(mynn._2)
-    for (i <- 0 to mynn._1.length - 1) {
-      print(mynn._1(i) + "\t")
-    }
-    println()
-    println("mynn_W1")
-    val tmpw1 = mynn._3(0)
-    for (i <- 0 to tmpw1.rows - 1) {
-      for (j <- 0 to tmpw1.cols - 1) {
-        print(tmpw1(i, j) + "\t")
-      }
-      println()
-    }
-    */
 }
