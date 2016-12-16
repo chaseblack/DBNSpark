@@ -466,7 +466,7 @@ object NeuralNet extends Serializable {
     val d2 = BDM((1.25592501437006, -0.834980000207940, 2.29875024099543, 0.0194882319892158, 1.45126037957791, -0.492648144141757, -1.35365058999520, -2.15014190874756))
     nn_W += d2
     nn_W.toArray
-  }
+    }
   def InitialWeight(size: Array[Int]): Array[BDM[Double]] = {
     // 初始化权重参数
     // weights and weight momentum
@@ -557,22 +557,23 @@ object NeuralNet extends Serializable {
    * 计算神经网络中的每个节点的输出值;
    */
   def NNff(
-    batch_xy2: RDD[(BDM[Double], BDM[Double])],
-    bc_config: org.apache.spark.broadcast.Broadcast[NNConfig],
-    bc_nn_W: org.apache.spark.broadcast.Broadcast[Array[BDM[Double]]]): RDD[(NNLabel, Array[BDM[Double]])] = {
+      batch_xy2: RDD[(BDM[Double], BDM[Double])]
+      ,bc_config: org.apache.spark.broadcast.Broadcast[NNConfig]
+      ,bc_nn_W: org.apache.spark.broadcast.Broadcast[Array[BDM[Double]]]): 
+      RDD[(NNLabel, Array[BDM[Double]])] = {
     // 第1层:a(1)=[1 x]
     // 增加偏置项b
     val train_data1 = batch_xy2.map { f =>
-      val lable = f._1
-      val features = f._2
+      val y = f._1
+      val x = f._2
       val nna = ArrayBuffer[BDM[Double]]()
-      val Bm1 = new BDM(features.rows, 1, Array.fill(features.rows * 1)(1.0))
-      val features2 = BDM.horzcat(Bm1, features)
-      val error = BDM.zeros[Double](lable.rows, lable.cols)
+      val Bm1 = new BDM(x.rows, 1, Array.fill(x.rows * 1)(1.0))
+      val features2 = BDM.horzcat(Bm1, x)
+      val error = BDM.zeros[Double](y.rows, y.cols)
       nna += features2
-      NNLabel(lable, nna, error)
+      NNLabel(y, nna, error)
     }
-
+    /*
     //    println("bc_size " + bc_config.value.size(0) + bc_config.value.size(1) + bc_config.value.size(2))
     //    println("bc_layer " + bc_config.value.layer)
     //    println("bc_activation_function " + bc_config.value.activation_function)
@@ -593,6 +594,7 @@ object NeuralNet extends Serializable {
     //val tmp2 = new BDM(1, tmp1.length, tmp1)
     //val nn_a = ArrayBuffer[BDM[Double]]()
     //nn_a += tmp2
+    */
     val train_data2 = train_data1.map { f =>
       val nn_a = f.nna
       val dropOutMask = ArrayBuffer[BDM[Double]]()
@@ -863,7 +865,7 @@ object NeuralNet extends Serializable {
       gradientAvg += Bmavg
     }
     gradientAvg.toArray
-  }
+}
 
   /**
    * NNapplygrads是权重更新

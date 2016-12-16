@@ -30,8 +30,8 @@ class DBN(private var size: Array[Int], private var layer: Int, private var mome
     val sc = train_d.sparkContext
     val dbnconfig = DBNHyperParams(size, layer, momentum, alpha)
     // init params
-    var dbn_deviat=DBN.InitVar(size)
-    var dbn_v_inv_deviat=DBN.InitvVar(size)
+    var dbn_deviat=DBN.InitDeviat(size)
+    var dbn_v_inv_deviat=DBN.InitVInvDeviat(size)
     var dbn_W = DBN.InitialW(size)
     var dbn_vW = DBN.InitialvW(size)
     var dbn_b = DBN.Initialb(size)
@@ -48,10 +48,11 @@ class DBN(private var size: Array[Int], private var layer: Int, private var mome
     dbn_vb(0) = param1.vb
     dbn_c(0) = param1.c
     dbn_vc(0) = param1.vc
-    
-    printf("Train the rest RBMs.........")
+    dbn_deviat=param1.deviat
+    dbn_v_inv_deviat= param1.v_inv_deviat
+    println("Train the rest RBMs.........")
     for (i <- 2 to dbnconfig.layer - 1) {
-      printf("Train %d th RBM...", i)
+      println("Train %d th RBM...", i)
       val tmp_bc_w = sc.broadcast(dbn_W(i - 2))
       val tmp_bc_c = sc.broadcast(dbn_c(i - 2))
       val train_d2 = train_d.map { f =>// 前向计算x x = sigm(repmat(rbm.c', size(x, 1), 1) + x * rbm.W');
@@ -69,8 +70,8 @@ class DBN(private var size: Array[Int], private var layer: Int, private var mome
       dbn_c(i - 1) = weight2.c
       dbn_vc(i - 1) = weight2.vc
     }
-    new DBNModel(dbnconfig, dbn_W, dbn_b, dbn_c)
-  }
+    new DBNModel(dbnconfig, dbn_W, dbn_b, dbn_c,dbn_deviat)
+    }
   
   
   def GaussianRBMtrain(train_t: RDD[(BDM[Double], BDM[Double])], opts: Array[Double], hyperparams: DBNHyperParams, weight: GaussianDBNParams): GaussianDBNParams = {
@@ -153,7 +154,11 @@ class DBN(private var size: Array[Int], private var layer: Int, private var mome
         //UPDATE var
         val v_inv_deviat1 = batch_vh1.map {case (lable, v1, h1, v2, h2, c1, c2, d1, d2) =>(d1 - d2)}
         val init_v_inv_deviat1 = BDM.zeros[Double](broadcast_rbm_deviat.value.cols, broadcast_rbm_deviat.value.rows)
-        val (v_inv_deviat2, count) = vc1.treeAggregate((init_v_inv_deviat1, 0L))(seqOp = (c, v) =>(c._1 + v, c._2 + 1),combOp = (c1, c2) =>(c1._1 + c2._1, c1._2 + c2._2))
+        val (v_inv_deviat2, count) = v_inv_deviat1.treeAggregate((init_v_inv_deviat1, 0L)
+            )(
+                seqOp = (c, v) =>(c._1 + v, c._2 + 1),
+                combOp = (c1, c2) =>(c1._1 + c2._1, c1._2 + c2._2)
+                )
         val v_inv_deviat3=v_inv_deviat2 / count.toDouble//row vec
         rbm_v_inv_deviat=broadcast_config.value.momentum*rbm_v_inv_deviat+v_inv_deviat3.t
         val inv_deviat=1.toDouble/broadcast_rbm_deviat.value + rbm_v_inv_deviat
@@ -440,8 +445,8 @@ object DBN extends Serializable {
     rbm_vc.toArray
   }
   // Gaussian variance
-  def InitVar(size: Array[Int]):BDM[Double]=BDM.ones[Double](size(0), 1)
-  def InitvVar(size: Array[Int]):BDM[Double]=BDM.zeros[Double](size(0),1)
+  def InitDeviat(size: Array[Int]):BDM[Double]=BDM.ones[Double](size(0), 1)
+  def InitVInvDeviat(size: Array[Int]):BDM[Double]=BDM.zeros[Double](size(0),1)
   
   def samplestates(h0: BDM[Double]):BDM[Double]={
     val r1 = BDM.rand[Double](h0.rows, h0.cols)

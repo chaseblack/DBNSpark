@@ -22,9 +22,7 @@ case class PredictNNLabel(label: BDM[Double], features: BDM[Double], predict_lab
  * NN(neural network)
  */
 
-class NeuralNetModel(
-  val config: NNConfig,
-  val weights: Array[BDM[Double]]) extends Serializable {
+class NeuralNetModel(val config: NNConfig,val weights: Array[BDM[Double]]) extends Serializable {
 
   /**
    * 返回预测结果

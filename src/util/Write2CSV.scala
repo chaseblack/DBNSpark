@@ -2,24 +2,268 @@ package util
 
 import java.io.StringWriter
 import au.com.bytecode.opencsv.CSVWriter
+import au.com.bytecode.opencsv.CSVReader
 import scala.collection.JavaConversions._
 import java.io.FileWriter
+import java.io.FileReader
 import java.io.BufferedWriter
+import java.io.BufferedReader
+
+import breeze.linalg.{DenseMatrix => BDM}
+import breeze.linalg.{DenseVector => BDV}
+import breeze.stats.mean
+import scala.collection.mutable.ArrayBuffer
+
+object Write2CSV {
+  
+  def writeMatrix2File(file:String,matrix:BDM[String]):Unit={
+    val out = new BufferedWriter(new FileWriter(file));
+    
+   // val writer = new CSVWriter(out);
+    val rows=matrix.rows
+    val cols=matrix.cols
+    //print(rows+" "+cols)
+    for(i<-0 to rows-1){
+      for(j<-0 to cols-1){
+        if(j==cols-1)out.write(matrix(i,j))
+        else out.write(matrix(i,j)+" ")
+        }
+      out.write("\n")
+    }
+    out.flush()
+    out.close()
+    
+}
+  
+  def normalize(matrix2D:BDM[String])={
+     for(j<-0 to matrix2D.cols-1){
+        val textIndexMap=examples.DBNApp.label_global
+        val textIndex=textIndexMap.values.toArray
+        val colVec=matrix2D(::,j)
+        println(colVec.length)
+        if(!textIndex.contains(j)){//complete non text missing values with 10000000
+          val emptyPositionCollector=new ArrayBuffer[(Int,Int)]()
+          for(i<- 0 to colVec.length-1){
+            if(colVec(i)=="NULL"){
+              //matrix2D(i,j)="0"
+              colVec(i)="0"
+              val position=(i,j)
+              emptyPositionCollector+=position
+              }
+            }
+          val colVecNoHead=colVec.slice(1, colVec.length)
+          val colVecDouble=colVecNoHead.map { x => x.toDouble }
+          val m=mean(colVecDouble)
+          val min=colVecDouble.min
+          val max=colVecDouble.max
+          for(i<- 1 to colVec.length-1){
+            if(emptyPositionCollector.contains((i,j)))matrix2D(i,j)=((m-min)/(max-min)).toString()
+            matrix2D(i,j)=((matrix2D(i,j).toDouble-min)/(max-min)).toString()
+          }
+          
+        }else if(j==textIndexMap.get("渗透性类型")){
+          for(i<- 0 to colVec.length-1)if(colVec(i)=="NULL")matrix2D(i,j)="0.5,0.5,0.5,0.5"
+        }else if(j==textIndexMap.get("岩性")){
+          for(i<- 0 to colVec.length-1)if(colVec(i)=="NULL")matrix2D(i,j)="0.5,0.5"
+        }else if(j==textIndexMap.get("井型")){
+          for(i<- 0 to colVec.length-1)if(colVec(i)=="NULL")matrix2D(i,j)="0.5,0.5,0.5"
+        }else if(j==textIndexMap.get("抽油机机型")){
+          for(i<- 0 to colVec.length-1)if(colVec(i)=="NULL")matrix2D(i,j)="0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"
+        }else if(j==textIndexMap.get("电机型号")){
+          for(i<- 0 to colVec.length-1)if(colVec(i)=="NULL")matrix2D(i,j)="0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"
+        }else if(j==textIndexMap.get("泵况分析结果")){
+          for(i<- 0 to colVec.length-1)if(colVec(i)=="NULL")matrix2D(i,j)="0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5"
+        }else if(j==textIndexMap.get("对标结果")){
+          for(i<- 0 to colVec.length-1)if(colVec(i)=="NULL")matrix2D(i,j)="0.5,0.5,0.5"
+        }
+    }
+     matrix2D
+  }
+  def main(args:Array[String])={
+    val reader=new CSVReader(new BufferedReader(new FileReader("BPU_Data.csv")))
+    val array2D=reader.readAll().toVector.toArray
+    //val array2DNoHead=array2D.slice(1,array2D.length)//remove head
+    val rows=array2D.length
+    val cols=array2D(0).length
+    val matrix2D=assignRaw(rows,cols,array2D)
+    
+    //val s=matrix2D(::,40).toArray//31
+    //val s1=s.distinct
+    //for(m<-s1)println(m)
+      
+    //printMatrix(rows,cols,matrix2D)
+    val cleanedMatrix=cleanMatrix(matrix2D)
+   // printMatrix(rows,cols,cleanedMatrix)
+    val matrix=normalize(cleanedMatrix)
+   
+    
+    
+    
+    writeMatrix2File("cleanedBPU.csv",matrix)
+    
+  }
+  
+  def assignRaw(rows:Int,cols:Int,array2D:Array[Array[String]])={
+    val matrix2D=BDM.zeros[String](rows, cols)
+     for(i<-0 to rows-1){
+      val a=array2D(i)
+      for(j<-0 to cols-1)matrix2D(i,j)=a(j)
+     }
+    matrix2D
+  }
+  
+  def printMatrix(rows:Int,cols:Int,matrix:BDM[String]):Unit={
+    for(i<-0 to 10){
+      for(j<-0 to cols-1){
+        if(matrix(i,j)=="")print("NULL"+" ")
+        else print(matrix(i,j)+" ")
+      }
+      println()
+      }
+    println()
+    println()
+    println()
+    }
+  
+  def cleanMatrix(matrix2D:BDM[String]):BDM[String]={
+    val cleanedMatrix=matrix2D.map { x => 
+      x match{
+        case "" => "NULL"
+        case "特低渗透"=> "1,0,0,0"//渗透性类型
+        case "中渗透"=> "0,1,0,0"//渗透性类型
+        case "低渗透"=> "0,0,1,0"//渗透性类型
+        case "高渗透"=> "0,0,0,1"//渗透性类型
+        case "灰岩"=>"1,0"//岩性
+        case "砂岩"=>"0,1"//岩性
+        case "直井"=>"1,0,0"//井型
+        case "定向井"=>"0,1,0"//井型
+        case "水平井"=>"0,0,1"//井型
+        case "YCYJ12-5-48HB"=> "1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "CYJS12-5-73HB"=> "0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "CYJ14-4.8-73HB"=> "0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "YCYJ12-5-73HB"=> "0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "CYJY14-4.8-73HB"=> "0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "CYJ8-3-48B"=> "0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "CYJ10-3-48HB"=> "0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "CYJW12-4.8-73HF"=> "0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "CYJ12-4.8-73HB"=> "0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "YCYS12-5-73HB"=> "0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "CYJY12-4.8-73HB"=> "0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "YCYJ10-5-48HB"=> "0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "CYJ10-3-37HB"=> "0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "YCYJ14-5-53HB"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "CYJ8-3-48HB"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "CYJ12-4.2-73HB"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "CYJ10-4.2-53HB"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "CYJ10-3-53HB"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "CYJ10-3-37B"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "YCYJ14-5-73HB"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "CYJY12-5.5-73HB"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "CYJ14-4.8-53HB"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "CYJP14-4.8-53HB"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "YCYJ16-6-73HB"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "WCYJW14-7-3Z"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "CYJS12-5-53HB"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0"//抽油机机型
+        case "CYJY14-5.5-73HB"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0"//抽油机机型
+        case "CYJ14-5.5-73HB"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0"//抽油机机型
+        case "CYJP12-4.8-53HB"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0"//抽油机机型
+        case "CYJW14-4.8-73HF"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0"//抽油机机型
+        case "YCYJ10-5-37HB"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0"//抽油机机型
+        case "YCYJ14-7-73HB"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0"//抽油机机型
+        case "CYJ12-5-73HB"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0"//抽油机机型
+        case "YCYJ14-6-73HB"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0"//抽油机机型
+        case "CYJD12-5-73HB"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1"//抽油机机型
+        case "CYQT250M-8"=> "1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//电机型号
+        case "YCCH280-8"=> "0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//电机型号
+        case "YCY280M-8"=> "0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//电机型号
+        case "YCCH250-8"=> "0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//电机型号
+        case "YQK280S-8"=> "0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//电机型号
+        case "YCH250-8"=> "0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//电机型号
+        case "Y280S-8"=> "0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//电机型号
+        case "YCCH250-6"=> "0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//电机型号
+        case "YCY280M2-8"=> "0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//电机型号
+        case "YCCH280-6"=> "0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//电机型号
+        case "YCY250M-8"=> "0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//电机型号
+        case "YCY280S-6"=> "0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//电机型号
+        case "Y280M-8"=> "0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//电机型号
+        case "无电机数据"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//电机型号
+        case "YCH280-8"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//电机型号
+        case "YCY280S-8"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//电机型号
+        case "CYQT250M2-8"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0"//电机型号
+        case "YCYH250M-8"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0"//电机型号
+        case "YCY250S-8"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0"//电机型号
+        case "YCH280-12"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0"//电机型号
+        case "Y250M-8"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0"//电机型号
+        case "CY280M-8"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0"//电机型号
+        case "YCYJ280M-8B"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0"//电机型号
+        case "SFBJ-CXT-280M-8"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0"//电机型号
+        case "YCY280M-6"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0"//电机型号
+        case "YCCH280S-8"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0"//电机型号
+        case "BLM-0T45D60VI"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0"//电机型号
+        case "YCHD280-8"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0"//电机型号
+        case "YCYJ280M2-8B"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0"//电机型号
+        case "YCYT315-8"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0"//电机型号
+        case "CYQT250M2-12"=> "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1"//电机型号
+        case "工作正常"=>"1,0,0,0,0,0,0,0,0,0,0,0"//泵况分析结果
+        case "供液不足"=>"0,1,0,0,0,0,0,0,0,0,0,0"
+        case "不知"=>"0,0,0,0,0,0,0,0,0,0,0,0"
+        case "泵漏失"=>"0,0,1,0,0,0,0,0,0,0,0,0"
+        case "稠油影响"=>"0,0,0,0,0,0,0,0,1,0,0,0"
+        case "气体影响"=>"0,0,0,0,0,0,0,0,0,1,0,0"
+        case "油管漏失"=>"0,0,0,0,0,1,0,0,0,0,0,0"
+        case "抽油杆断"=>"0,0,0,0,0,0,0,0,0,0,1,0"
+        case "游动凡尔漏失"=>"0,0,0,0,0,0,1,0,0,0,0,0"
+        case "泵下碰"=>"0,0,0,0,1,0,0,0,0,0,0,0"
+        case "泵工作基本正常"=>"1,0,0,0,0,0,0,0,0,0,0,0"
+        case "游动凡尔漏失泵下碰"=>"0,0,0,0,1,0,1,0,0,0,0,0"
+        case "固定凡尔漏失游动凡尔漏失"=>"0,0,0,0,0,0,1,0,0,0,0,0"
+        case "供液不足游动凡尔漏失"=>"0,1,0,0,0,0,1,0,0,0,0,0"
+        case "连抽带喷"=>"0,0,0,0,0,0,0,1,0,0,0,0"
+        case "固定凡尔漏失"=>"0,0,0,0,0,0,1,0,0,0,0,0"
+        case "游动凡尔漏失泵上挂"=>"0,0,0,1,0,0,1,0,0,0,0,0"
+        case "抽油杆断脱,位置距井口m:1482.00"=>"0,0,0,0,0,0,0,0,0,0,1,0"
+        case "抽油杆断脱,位置距井口m:1089.00"=>"0,0,0,0,0,0,0,0,0,0,1,0"
+        case "固定凡尔漏失泵下碰"=>"0,0,0,0,1,0,1,0,0,0,0,0"
+        case "正常"=>"1,0,0,0,0,0,0,0,0,0,0,0"
+        case "供液不足泵下碰"=>"0,1,0,0,1,0,0,0,0,0,0,0"
+        case "凡尔失灵或杆在泵口断脱"=>"0,0,0,0,0,0,0,0,0,0,1,0"
+        case "定凡尔漏失游动凡尔漏失"=>"0,0,0,0,0,0,1,0,0,0,0,0"
+        case "气体影响游动凡尔漏失"=>"0,0,0,0,0,0,1,0,0,1,0,0"
+        case "功液不足游动凡尔漏失"=>"0,1,0,0,0,0,1,0,0,0,0,0"
+        case "供液不足游动凡儿漏失"=>"0,1,0,0,0,0,1,0,0,0,0,0"
+        case "气锁或严重液击"=>"0,0,0,0,0,0,0,0,0,0,0,1"
+        case "抽油杆断脱,位置距井口m:1985.00"=>"0,0,0,0,0,0,0,0,0,0,1,0"
+        case "抽油杆断脱,位置距井口m:2195.00"=>"0,0,0,0,0,0,0,0,0,0,1,0"
+        case "抽油杆断脱,位置距井口m:2247.00"=>"0,0,0,0,0,0,0,0,0,0,1,0"
+        case "抽油杆断脱,位置距井口m:2049.00"=>"0,0,0,0,0,0,0,0,0,0,1,0"
+        case "抽油杆断脱,位置距井口m:1975.00"=>"0,0,0,0,0,0,0,0,0,0,1,0"
+        case "气体影响固定凡尔漏失"=>"0,0,0,0,0,0,1,0,0,1,0,0"
+        case "供液不足固定凡尔漏失"=>"0,1,0,0,0,0,1,0,0,0,0,0"
+        case "固定凡尔漏失泵上挂"=>"0,0,0,1,0,0,1,0,0,0,0,0"
+        case "抽油杆断脱,位置距井口m:1790.00"=>"0,0,0,0,0,0,0,0,0,0,1,0"
+        case "气体影响泵下碰"=>"0,0,0,0,1,0,0,0,0,1,0,0"
+        case "抽油杆断脱,位置距井口m:2178.00"=>"0,0,0,0,0,0,0,0,0,0,1,0"
+        case "抽油杆断脱,位置距井口m:2272.00"=>"0,0,0,0,0,0,0,0,0,0,1,0"
+        case "优良"=>"1,0,0"//对标结果
+        case "不达标"=>"0,1,0"//对标结果
+        case "达标"=>"0,0,1"//对标结果
+        case _ => x
+        }
+      }
+    cleanedMatrix
+  }
+  /*
+   * val employeeSchema=Array("name","age","dept")
  
-object Write2CSV extends App {
-val out = new BufferedWriter(new FileWriter("/home/piyush/Desktop/employee.csv"));
-val writer = new CSVWriter(out);
-val employeeSchema=Array("name","age","dept")
+    val employee1= Array("piyush","23","computerscience")
  
-val employee1= Array("piyush","23","computerscience")
+    val employee2= Array("neel","24","computerscience")
  
-val employee2= Array("neel","24","computerscience")
+    val employee3= Array("aayush","27","computerscience")
  
-val employee3= Array("aayush","27","computerscience")
+    var listOfRecords= List(employeeSchema,employee1,employee2,employee3)
  
-var listOfRecords= List(employeeSchema,employee1,employee2,employee3)
- 
-writer.writeAll(listOfRecords)
-out.close()
- 
+    writer.writeAll(listOfRecords)
+   * 
+   * */
 }

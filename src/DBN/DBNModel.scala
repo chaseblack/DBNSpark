@@ -11,18 +11,15 @@ import breeze.linalg.{
 import org.apache.spark.rdd.RDD
 import scala.collection.mutable.ArrayBuffer
 
-class DBNModel(
-  val config: DBNHyperParams,
-  val dbn_W: Array[BDM[Double]],
-  val dbn_b: Array[BDM[Double]],
-  val dbn_c: Array[BDM[Double]]) extends Serializable {
+class DBNModel(val config: DBNHyperParams,val dbn_W: Array[BDM[Double]],val dbn_b: Array[BDM[Double]],val dbn_c: Array[BDM[Double]],val Gauss_deviat:BDM[Double]/*col vec*/) extends Serializable {
 
   /**
    * DBN模型转化为NN模型
    * 权重转换
    */
   def dbnunfoldtonn(outputsize: Int): (Array[Int], Int, Array[BDM[Double]]) = {
-    //1 size layer 参数转换
+    //config:   size: Array[Int], layer: Int, momentum: Double, alpha: Double
+    //
     val size = if (outputsize > 0) {
       val size1 = config.size
       val size2 = ArrayBuffer[Int]()
@@ -30,6 +27,7 @@ class DBNModel(
       size2 += outputsize
       size2.toArray
     } else config.size
+    
     val layer = if (outputsize > 0) config.layer + 1 else config.layer
     
     //2 dbn_W 参数转换
